@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess Game</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        .game-container {
+            display: flex;
+            align-items: flex-start;
+        }
+        #chessboard {
+            display: grid;
+            grid-template-columns: repeat(8, 50px);
+            grid-template-rows: repeat(8, 50px);
+            border: 2px solid #333;
+        }
+        .square {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 30px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .white {
+            background-color: #f0d9b5;
+        }
+        .black {
+            background-color: #b58863;
+        }
+        .selected {
+            background-color: #7fb3d5;
+        }
+        .valid-move {
+            background-color: #82e0aa;
+        }
+        .captured-pieces {
+            width: 100px;
+            height: 400px;
+            /*border: 1px solid #333;*/
+            margin: 0 10px;
+            padding: 5px;
+            display: flex;
+            flex-wrap: wrap;
+            align-content: flex-start;
+        }
+        .captured-piece {
+            font-size: 24px;
+            margin: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div id="white-captured" class="captured-pieces"></div>
+        <div id="chessboard"></div>
+        <div id="black-captured" class="captured-pieces"></div>
+    </div>
+
+    <script>
+        const chessboard = document.getElementById('chessboard');
+        const whiteCaptured = document.getElementById('white-captured');
+        const blackCaptured = document.getElementById('black-captured');
+        let selectedPiece = null;
+        let currentPlayer = 'white';
+
+        const initialBoard = [
+            ['♜', '♞', '♝', '♛', '♚', '♝', '♞', '♜'],
+            ['♟', '♟', '♟', '♟', '♟', '♟', '♟', '♟'],
+            ['', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', ''],
+            ['♙', '♙', '♙', '♙', '♙', '♙', '♙', '♙'],
+            ['♖', '♘', '♗', '♕', '♔', '♗', '♘', '♖']
+        ];
+
+        function createBoard() {
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const square = document.createElement('div');
+                    square.classList.add('square');
+                    square.classList.add((row + col) % 2 === 0 ? 'white' : 'black');
+                    square.dataset.row = row;
+                    square.dataset.col = col;
+                    square.textContent = initialBoard[row][col];
+                    square.addEventListener('click', handleClick);
+                    chessboard.appendChild(square);
+                }
+            }
+        }
+
+        function handleClick(event) {
+            const square = event.target;
+            const row = parseInt(square.dataset.row);
+            const col = parseInt(square.dataset.col);
+
+            if (selectedPiece) {
+                if (isValidMove(selectedPiece, row, col)) {
+                    movePiece(selectedPiece, row, col);
+                    clearSelection();
+                    currentPlayer = currentPlayer === 'white' ? 'black' : 'white';
+                } else {
+                    clearSelection();
+                }
+            } else if (square.textContent && isPieceOfCurrentPlayer(square.textContent)) {
+                selectPiece(square);
+            }
+        }
+
+        function selectPiece(square) {
+            square.classList.add('selected');
+            selectedPiece = square;
+            showValidMoves(square);
+        }
+
+        function clearSelection() {
+            if (selectedPiece) {
+                selectedPiece.classList.remove('selected');
+                selectedPiece = null;
+            }
+            clearValidMoves();
+        }
+
+        function showValidMoves(square) {
+            const row = parseInt(square.dataset.row);
+            const col = parseInt(square.dataset.col);
+
+            for (let i = 0; i < 8; i++) {
+                for (let j = 0; j < 8; j++) {
+                    if (isValidMove(square, i, j)) {
+                        const targetSquare = document.querySelector(`[data-row="${i}"][data-col="${j}"]`);
+                        targetSquare.classList.add('valid-move');
+                    }
+                }
+            }
+        }
+
+        function clearValidMoves() {
+            const validMoves = document.querySelectorAll('.valid-move');
+            validMoves.forEach(square => square.classList.remove('valid-move'));
+        }
+
+        function isValidMove(fromSquare, toRow, toCol) {
+            const fromRow = parseInt(fromSquare.dataset.row);
+            const fromCol = parseInt(fromSquare.dataset.col);
+            const piece = fromSquare.textContent;
+            const targetPiece = getPieceAt(toRow, toCol);
+
+            if (!piece) return false;
+            if (targetPiece && isPieceOfCurrentPlayer(targetPiece)) return false;
+
+            switch (piece.toLowerCase()) {
+                case '♙':
+                case '♟':
+                    return isValidPawnMove(fromRow, fromCol, toRow, toCol, piece === '♙');
+                case '♖':
+                case '♜':
+                    return isValidRookMove(fromRow, fromCol, toRow, toCol);
+                case '♘':
+                case '♞':
+                    return isValidKnightMove(fromRow, fromCol, toRow, toCol);
+                case '♗':
+                case '♝':
+                    return isValidBishopMove(fromRow, fromCol, toRow, toCol);
+                case '♕':
+                case '♛':
+                    return isValidQueenMove(fromRow, fromCol, toRow, toCol);
+                case '♔':
+                case '♚':
+                    return isValidKingMove(fromRow, fromCol, toRow, toCol);
+                default:
+                    return false;
+            }
+        }
+
+        function isValidPawnMove(fromRow, fromCol, toRow, toCol, isWhite) {
+            const direction = isWhite ? -1 : 1;
+            const startRow = isWhite ? 6 : 1;
+            const targetPiece = getPieceAt(toRow, toCol);
+            
+            if (fromCol === toCol && !targetPiece) {
+                if (fromRow + direction === toRow) {
+                    return true;
+                }
+                if (fromRow === startRow && fromRow + 2 * direction === toRow && !getPieceAt(fromRow + direction, toCol)) {
+                    return true;
+                }
+            } else if (Math.abs(fromCol - toCol) === 1 && fromRow + direction === toRow) {
+                return targetPiece && isPieceOfCurrentPlayer(targetPiece) !== isWhite;
+            }
+            return false;
+        }
+
+        function isValidRookMove(fromRow, fromCol, toRow, toCol) {
+            return (fromRow === toRow || fromCol === toCol) && !isPathBlocked(fromRow, fromCol, toRow, toCol);
+        }
+
+        function isValidKnightMove(fromRow, fromCol, toRow, toCol) {
+            const rowDiff = Math.abs(fromRow - toRow);
+            const colDiff = Math.abs(fromCol - toCol);
+            return (rowDiff === 2 && colDiff === 1) || (rowDiff === 1 && colDiff === 2);
+        }
+
+        function isValidBishopMove(fromRow, fromCol, toRow, toCol) {
+            return Math.abs(fromRow - toRow) === Math.abs(fromCol - toCol) && !isPathBlocked(fromRow, fromCol, toRow, toCol);
+        }
+
+        function isValidQueenMove(fromRow, fromCol, toRow, toCol) {
+            return (isValidRookMove(fromRow, fromCol, toRow, toCol) || isValidBishopMove(fromRow, fromCol, toRow, toCol));
+        }
+
+        function isValidKingMove(fromRow, fromCol, toRow, toCol) {
+            return Math.abs(fromRow - toRow) <= 1 && Math.abs(fromCol - toCol) <= 1;
+        }
+
+        function isPathBlocked(fromRow, fromCol, toRow, toCol) {
+            const rowStep = fromRow < toRow ? 1 : fromRow > toRow ? -1 : 0;
+            const colStep = fromCol < toCol ? 1 : fromCol > toCol ? -1 : 0;
+            let currentRow = fromRow + rowStep;
+            let currentCol = fromCol + colStep;
+
+            while (currentRow !== toRow || currentCol !== toCol) {
+                if (getPieceAt(currentRow, currentCol)) {
+                    return true;
+                }
+                currentRow += rowStep;
+                currentCol += colStep;
+            }
+            return false;
+        }
+
+        function getPieceAt(row, col) {
+            const square = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+            return square ? square.textContent : null;
+        }
+
+        function isPieceOfCurrentPlayer(piece) {
+            return (currentPlayer === 'white' && piece.match(/[♔♕♖♗♘♙]/)) ||
+                   (currentPlayer === 'black' && piece.match(/[♚♛♜♝♞♟]/));
+        }
+
+        function movePiece(fromSquare, toRow, toCol) {
+            const toSquare = document.querySelector(`[data-row="${toRow}"][data-col="${toCol}"]`);
+            const capturedPiece = toSquare.textContent;
+            
+            if (capturedPiece) {
+                addCapturedPiece(capturedPiece);
+            }
+
+            toSquare.textContent = fromSquare.textContent;
+            fromSquare.textContent = '';
+
+            // Add animation
+            toSquare.style.transform = 'scale(1.2)';
+            setTimeout(() => {
+                toSquare.style.transform = 'scale(1)';
+            }, 200);
+        }
+
+        function addCapturedPiece(piece) {
+            const capturedPieceElement = document.createElement('span');
+            capturedPieceElement.textContent = piece;
+            capturedPieceElement.classList.add('captured-piece');
+            
+            if (piece.match(/[♔♕♖♗♘♙]/)) {
+                blackCaptured.appendChild(capturedPieceElement);
+            } else {
+                whiteCaptured.appendChild(capturedPieceElement);
+            }
+        }
+
+        createBoard();
+    </script>
+</body>
+</html>
